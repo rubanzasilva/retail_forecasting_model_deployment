@@ -1,0 +1,17 @@
+service: "service:StickerSalesRegressor"
+labels:
+  owner: "rubanza-diminishing_gradients"
+  stage: "production"
+include:
+  - "*.py"
+  - "data/"
+python:
+  packages:
+    - bentoml>=1.3.18
+    - xgboost
+    - scikit-learn==1.3.1
+    - pandas
+    - numpy
+    - fastai
+    
+
