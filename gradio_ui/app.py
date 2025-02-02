@@ -1,108 +1,179 @@
 import gradio as gr
 import requests
 import pandas as pd
+import plotly.express as px
+from datetime import datetime, timedelta
+
 
 def generate_table_data(df, predictions):
     """
-    Generates the table data for the Gradio DataFrame component.
-    
-    This function takes the original data frame `df` and the list of predicted sticker sales `predictions`,
-    and creates a list of tuples representing the table rows. Each tuple contains the date, country, store,
-    product, and predicted sales information for a single row.
-    
-    The function iterates through the rows of the data frame, extracting the relevant information and creating
-    a tuple for each row. The tuples are added to the `table_data` list, which is ultimately returned.
-    
-    Parameters:
-    df (pandas.DataFrame): The original data frame.
-    predictions (list): The list of predicted sticker sales.
-    
+    Convert DataFrame and predictions into a format suitable for display
+   
+    Args:
+        df: Input DataFrame with sales data
+        predictions: List of prediction values
+   
     Returns:
-    list[tuple]: A list of tuples representing the table rows.
+        list: List of rows formatted for display
     """
+    df['date'] = pd.to_datetime(df['date'])
+   
     table_data = []
     for index, row in df.iterrows():
-        table_row = (
-            row["date"],
+        table_row = [
+            row["date"].strftime("%Y-%m-%d"),
             row["country"],
             row["store"],
             row["product"],
-            predictions[index]
-        )
+            float(predictions[index])
+        ]
         table_data.append(table_row)
+   
     return table_data
 
-def predict_csv_file(file_obj):
+
+def create_sales_plot(df, start_date, end_date):
     """
-    Processes the uploaded CSV file, makes predictions using the BentoML service,
-    and returns the predictions as a Gradio DataFrame.
-    
-    This function first checks if a file was uploaded. If no file was uploaded, it returns a message
-    asking the user to upload a CSV file.
-    
-    If a file was uploaded, the function reads the CSV file using pandas. It then creates a multipart
-    form-data payload and sends a POST request to the BentoML service to obtain the predicted sticker sales.
-    
-    After receiving the predictions, the function calls the `generate_table_data` function to create the
-    table data. The function then returns the path to the saved predictions CSV file and the Gradio DataFrame
-    component containing the table data.
-    
-    Parameters:
-    file_obj (gradio.files.UploadedFile): The uploaded CSV file.
-    
+    Create a Plotly figure for sales visualization
+   
+    Args:
+        df: DataFrame with sales data
+        start_date: Start date for filtering
+        end_date: End date for filtering
+   
     Returns:
-    (str, gradio.components.DataFrame): The path to the predictions CSV file and the predictions DataFrame.
+        plotly.Figure: Interactive sales visualization
+    """
+    # Convert dates and filter data
+    df['date'] = pd.to_datetime(df['date'])
+    start = pd.to_datetime(start_date)
+    end = pd.to_datetime(end_date)
+    mask = (df['date'] >= start) & (df['date'] <= end)
+    filtered_df = df[mask]
+   
+    # Create plot using Plotly Express
+    fig = px.line(
+        filtered_df,
+        x='date',
+        y='predicted_sales',
+        color='store',
+        title='Predicted Sales Over Time',
+        labels={
+            'date': 'Date',
+            'predicted_sales': 'Predicted Sales',
+            'store': 'Store'
+        }
+    )
+   
+    # Customize layout
+    fig.update_layout(
+        height=500,
+        showlegend=True,
+        hovermode='x unified'
+    )
+   
+    return fig
+
+
+def predict_and_visualize(file_obj, start_date, end_date):
+    """
+    Process uploaded file and create visualizations
+   
+    Args:
+        file_obj: Uploaded CSV file
+        start_date: Start date for filtering
+        end_date: End date for filtering
+   
+    Returns:
+        tuple: (file_path, DataFrame, Plot, error_message)
     """
     try:
-        # Check if file was uploaded
         if file_obj is None:
-            return None, "Please upload a CSV file"
+            return None, gr.DataFrame(), None, "Please upload a CSV file"
 
-        # Read the uploaded CSV file directly using pandas
+
+        # Read the uploaded CSV file
         df = pd.read_csv(file_obj.name)
-
-        # Create multipart form-data
-        files = {'csv': ('input.csv', open(file_obj.name, 'rb'), 'text/csv')}
-
+       
         # Make prediction request to BentoML service
+        files = {'csv': ('input.csv', open(file_obj.name, 'rb'), 'text/csv')}
         response = requests.post(
             "http://localhost:3000/predict_csv",
             files=files
         )
 
+
         if response.status_code == 200:
             predictions = response.json()
+           
+            # Create table data
             table_data = generate_table_data(df, predictions)
-
-            # Save results to a CSV file
+           
+            # Prepare data for plotting
+            df['date'] = pd.to_datetime(df['date'])
+            df['predicted_sales'] = predictions
+           
+            # Create the visualization
+            fig = create_sales_plot(df, start_date, end_date)
+           
+            # Save results to CSV
             results_path = "predictions_results.csv"
-            df['num_sold_predicted'] = predictions
             df.to_csv(results_path, index=False)
 
-            return results_path, gr.DataFrame(table_data, headers=["Date", "Country", "Store", "Product", "Predicted Sales"])
-        else:
-            return None, f"Error: {response.status_code} - {response.text}"
-    except Exception as e:
-        return None, f"Error processing file: {str(e)}"
 
+            return (
+                results_path,
+                gr.DataFrame(
+                    headers=["Date", "Country", "Store", "Product", "Predicted Sales"],
+                    value=table_data
+                ),
+                fig,
+                None
+            )
+        else:
+            return None, gr.DataFrame(), None, f"Error: {response.status_code} - {response.text}"
+    except Exception as e:
+        return None, gr.DataFrame(), None, f"Error processing file: {str(e)}"
+
+
+# Create the Gradio interface
 with gr.Blocks() as demo:
-    """
-    The Gradio interface for the sticker sales prediction application.
-    
-    This interface includes a file input for uploading a CSV file and a button to initiate the prediction
-    process. The results are displayed in a Gradio DataFrame component, showing the date, country, store,
-    product, and predicted sticker sales.
-    
-    The goal of this interface is to provide a clear and user-friendly way for the human to visualize the
-    predicted sticker sales. The thorough explanations and step-by-step approach aims to help the human
-    deeply understand the functionality and logic behind the application.
-    """
+    gr.Markdown("# Sticker Sales Predictions Dashboard")
+   
+    # Error message display
+    error_message = gr.Textbox(label="Status", interactive=False, visible=False)
+   
     with gr.Row():
         file_input = gr.File(label="Upload CSV File", file_types=[".csv"])
-        predict_button = gr.Button("Predict")
+   
     with gr.Row():
-        predictions_table = gr.DataFrame(label="Sticker Sales Predictions")
+        start_date = gr.Textbox(
+            label="Start Date (YYYY-MM-DD)",
+            value=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        )
+        end_date = gr.Textbox(
+            label="End Date (YYYY-MM-DD)",
+            value=datetime.now().strftime("%Y-%m-%d")
+        )
+        predict_button = gr.Button("Predict & Visualize")
+   
+    with gr.Row():
+        predictions_table = gr.DataFrame(
+            headers=["Date", "Country", "Store", "Product", "Predicted Sales"],
+            label="Sticker Sales Predictions"
+        )
+   
+    with gr.Row():
+        sales_plot = gr.Plot(label="Sales Trends")
+   
+    # Update both table and plot when button is clicked
+    predict_button.click(
+        predict_and_visualize,
+        inputs=[file_input, start_date, end_date],
+        outputs=[file_input, predictions_table, sales_plot, error_message]
+    )
 
-    predict_button.click(predict_csv_file, inputs=file_input, outputs=[file_input, predictions_table])
 
-demo.launch(server_name="0.0.0.0", server_port=7861)
+# Launch the interface
+if __name__ == "__main__":
+    demo.launch(server_name="0.0.0.0", server_port=7861)
