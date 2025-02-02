@@ -1,0 +1,11 @@
+id,date,country,store,product,predicted_sales
+230130,2017-01-01,Canada,Discount Stickers,Holographic Goose,134.79360961914062
+230131,2017-01-01,Canada,Discount Stickers,Kaggle,769.5571899414062
+230132,2017-01-01,Canada,Discount Stickers,Kaggle Tiers,686.07373046875
+230133,2017-01-01,Canada,Discount Stickers,Kerneler,344.25750732421875
+230134,2017-01-01,Canada,Discount Stickers,Kerneler Dark Mode,392.06927490234375
+230135,2017-01-01,Canada,Stickers for Less,Holographic Goose,248.32684326171875
+230136,2017-01-01,Canada,Stickers for Less,Kaggle,1523.3621826171875
+230137,2017-01-01,Canada,Stickers for Less,Kaggle Tiers,1328.4840087890625
+230138,2017-01-01,Canada,Stickers for Less,Kerneler,629.5877075195312
+230139,2017-01-01,Canada,Stickers for Less,Kerneler Dark Mode,765.1256103515625

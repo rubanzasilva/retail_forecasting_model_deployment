@@ -2,228 +2,178 @@ import gradio as gr
 import requests
 import pandas as pd
 import plotly.express as px
-import tempfile
-import os
-import json
+from datetime import datetime, timedelta
 
-def clean_data(df):
-    """
-    Cleans and preprocesses the input data to ensure consistent formatting.
-    """
-    # Clean column names - remove spaces and standardize
-    df.columns = df.columns.str.strip().str.lower()
-    
-    # Handle potential line breaks in string columns
-    string_columns = ['country', 'store', 'product']
-    for col in string_columns:
-        if col in df.columns:
-            df[col] = df[col].str.replace('\n', ' ').str.strip()
-    
-    # Ensure date is in correct format
-    df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
-    
-    return df
 
-def create_sales_plot(data, predictions):
+def generate_table_data(df, predictions):
     """
-    Creates an interactive line plot of sales predictions over time using plotly.
+    Convert DataFrame and predictions into a format suitable for display
+   
+    Args:
+        df: Input DataFrame with sales data
+        predictions: List of prediction values
+   
+    Returns:
+        list: List of rows formatted for display
     """
-    # Combine data and predictions
-    plot_df = data.copy()
-    plot_df['Predicted_Sales'] = predictions
-    
-    # Convert date to datetime for plotting
-    plot_df['date'] = pd.to_datetime(plot_df['date'])
-    
-    # Create the main line plot
+    df['date'] = pd.to_datetime(df['date'])
+   
+    table_data = []
+    for index, row in df.iterrows():
+        table_row = [
+            row["date"].strftime("%Y-%m-%d"),
+            row["country"],
+            row["store"],
+            row["product"],
+            float(predictions[index])
+        ]
+        table_data.append(table_row)
+   
+    return table_data
+
+
+def create_sales_plot(df, start_date, end_date):
+    """
+    Create a Plotly figure for sales visualization
+   
+    Args:
+        df: DataFrame with sales data
+        start_date: Start date for filtering
+        end_date: End date for filtering
+   
+    Returns:
+        plotly.Figure: Interactive sales visualization
+    """
+    # Convert dates and filter data
+    df['date'] = pd.to_datetime(df['date'])
+    start = pd.to_datetime(start_date)
+    end = pd.to_datetime(end_date)
+    mask = (df['date'] >= start) & (df['date'] <= end)
+    filtered_df = df[mask]
+   
+    # Create plot using Plotly Express
     fig = px.line(
-        plot_df,
+        filtered_df,
         x='date',
-        y='Predicted_Sales',
-        color='product',  # Color lines by product
-        title='Predicted Sticker Sales Over Time',
+        y='predicted_sales',
+        color='store',
+        title='Predicted Sales Over Time',
         labels={
-            'Predicted_Sales': 'Predicted Number of Sales',
             'date': 'Date',
-            'product': 'Product'
+            'predicted_sales': 'Predicted Sales',
+            'store': 'Store'
         }
     )
-    
-    # Enhance the layout
+   
+    # Customize layout
     fig.update_layout(
-        xaxis_title="Date",
-        yaxis_title="Predicted Sales",
-        hovermode='x unified',
-        template='plotly_white',
-        legend_title="Products",
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
+        height=500,
+        showlegend=True,
+        hovermode='x unified'
     )
-    
-    # Add hover data
-    fig.update_traces(
-        hovertemplate="<br>".join([
-            "Date: %{x|%Y-%m-%d}",
-            "Sales: %{y:,.0f}",
-            "Product: %{customdata[0]}",
-            "Store: %{customdata[1]}",
-            "Country: %{customdata[2]}"
-        ])
-    )
-    
+   
     return fig
 
-def predict_single_record(date, country, store, product):
-    """
-    Makes a prediction for a single record using the form input.
-    """
-    try:
-        # Create input data structure
-        data = {
-            "data": [{
-                "date": date,
-                "country": country,
-                "store": store,
-                "product": product
-            }]
-        }
-        
-        # Make prediction request to BentoML service
-        response = requests.post(
-            "http://localhost:3000/predict",  # Update with your BentoML service URL
-            json=data,
-            headers={"content-type": "application/json"}
-        )
-        
-        if response.status_code == 200:
-            prediction = response.json()
-            # Create a single-row DataFrame for plotting
-            df = pd.DataFrame([data["data"][0]])
-            return create_sales_plot(df, prediction)
-        else:
-            return f"Error: {response.status_code} - {response.text}"
-            
-    except requests.exceptions.RequestException as e:
-        return f"Error connecting to service: {str(e)}"
 
-def predict_csv_file(file_obj):
+def predict_and_visualize(file_obj, start_date, end_date):
     """
-    Makes predictions for multiple records using CSV input.
+    Process uploaded file and create visualizations
+   
+    Args:
+        file_obj: Uploaded CSV file
+        start_date: Start date for filtering
+        end_date: End date for filtering
+   
+    Returns:
+        tuple: (file_path, DataFrame, Plot, error_message)
     """
     try:
-        # Check if file was uploaded
         if file_obj is None:
-            return "Please upload a CSV file"
-            
-        # Read the uploaded CSV file and clean the data
+            return None, gr.DataFrame(), None, "Please upload a CSV file"
+
+
+        # Read the uploaded CSV file
         df = pd.read_csv(file_obj.name)
-        df = clean_data(df)
-        
-        # Create multipart form-data
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as tmp:
-            df.to_csv(tmp.name, index=False)
-            files = {
-                'csv': ('input.csv', open(tmp.name, 'rb'), 'text/csv')
-            }
-            
-            # Make prediction request to BentoML service
-            response = requests.post(
-                "http://localhost:3000/predict_csv",  # Update with your BentoML service URL
-                files=files
-            )
-        
-        # Clean up temporary file
-        os.unlink(tmp.name)
-        
+       
+        # Make prediction request to BentoML service
+        files = {'csv': ('input.csv', open(file_obj.name, 'rb'), 'text/csv')}
+        response = requests.post(
+            "http://localhost:3000/predict_csv",
+            files=files
+        )
+
+
         if response.status_code == 200:
             predictions = response.json()
-            
-            # Create and return the plot
-            return create_sales_plot(df, predictions)
+           
+            # Create table data
+            table_data = generate_table_data(df, predictions)
+           
+            # Prepare data for plotting
+            df['date'] = pd.to_datetime(df['date'])
+            df['predicted_sales'] = predictions
+           
+            # Create the visualization
+            fig = create_sales_plot(df, start_date, end_date)
+           
+            # Save results to CSV
+            results_path = "predictions_results.csv"
+            df.to_csv(results_path, index=False)
+
+
+            return (
+                results_path,
+                gr.DataFrame(
+                    headers=["Date", "Country", "Store", "Product", "Predicted Sales"],
+                    value=table_data
+                ),
+                fig,
+                None
+            )
         else:
-            return f"Error: {response.status_code} - {response.text}"
-            
+            return None, gr.DataFrame(), None, f"Error: {response.status_code} - {response.text}"
     except Exception as e:
-        return f"Error processing file: {str(e)}"
+        return None, gr.DataFrame(), None, f"Error processing file: {str(e)}"
 
-# Create the Gradio interface with tabs
+
+# Create the Gradio interface
 with gr.Blocks() as demo:
-    gr.Markdown("# Sticker Sales Forecasting")
-    
-    with gr.Tabs():
-        # Single Record Prediction Tab
-        with gr.TabItem("Single Prediction"):
-            with gr.Row():
-                with gr.Column():
-                    date_input = gr.Textbox(
-                        label="Date (YYYY-MM-DD)",
-                        placeholder="2017-01-01"
-                    )
-                    country_input = gr.Dropdown(
-                        choices=["Canada"],  # Add more countries as needed
-                        label="Country"
-                    )
-                    store_input = gr.Dropdown(
-                        choices=["Discount Stickers"],  # Add more stores as needed
-                        label="Store"
-                    )
-                    product_input = gr.Dropdown(
-                        choices=[
-                            "Holographic Goose",
-                            "Kaggle",
-                            "Kaggle Tiers",
-                            "Kerneler",
-                            "Kerneler Dark Mode"
-                        ],
-                        label="Product"
-                    )
-                    
-                    predict_btn = gr.Button("Predict")
-                
-                with gr.Column():
-                    plot_output1 = gr.Plot(label="Sales Prediction")
-            
-            predict_btn.click(
-                fn=predict_single_record,
-                inputs=[date_input, country_input, store_input, product_input],
-                outputs=plot_output1
-            )
-        
-        # Batch Prediction Tab
-        with gr.TabItem("Batch Prediction"):
-            gr.Markdown("""
-            ### CSV File Format Requirements
-            
-            Upload a CSV file containing multiple records for batch prediction.
-            The CSV should contain these columns:
-            - date (YYYY-MM-DD)
-            - country
-            - store
-            - product
-            
-            Example row:
-            ```
-            date,country,store,product
-            2017-01-01,Canada,Discount Stickers,Holographic Goose
-            ```
-            """)
-            
-            file_input = gr.File(
-                label="Upload CSV File",
-                file_types=[".csv"]
-            )
-            plot_output2 = gr.Plot(label="Sales Predictions")
-            
-            file_input.change(
-                fn=predict_csv_file,
-                inputs=file_input,
-                outputs=plot_output2
-            )
+    gr.Markdown("# Sticker Sales Predictions Dashboard")
+   
+    # Error message display
+    error_message = gr.Textbox(label="Status", interactive=False, visible=False)
+   
+    with gr.Row():
+        file_input = gr.File(label="Upload CSV File", file_types=[".csv"])
+   
+    with gr.Row():
+        start_date = gr.Textbox(
+            label="Start Date (YYYY-MM-DD)",
+            value=(datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        )
+        end_date = gr.Textbox(
+            label="End Date (YYYY-MM-DD)",
+            value=datetime.now().strftime("%Y-%m-%d")
+        )
+        predict_button = gr.Button("Predict & Visualize")
+   
+    with gr.Row():
+        predictions_table = gr.DataFrame(
+            headers=["Date", "Country", "Store", "Product", "Predicted Sales"],
+            label="Sticker Sales Predictions"
+        )
+   
+    with gr.Row():
+        sales_plot = gr.Plot(label="Sales Trends")
+   
+    # Update both table and plot when button is clicked
+    predict_button.click(
+        predict_and_visualize,
+        inputs=[file_input, start_date, end_date],
+        outputs=[file_input, predictions_table, sales_plot, error_message]
+    )
 
+
+# Launch the interface
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7861)

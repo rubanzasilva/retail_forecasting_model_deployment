@@ -24,7 +24,7 @@ from sklearn.model_selection import KFold, cross_val_score,train_test_split
 #import wandb
 
 # Load the model by setting the model tag
-booster = bentoml.xgboost.load_model("sticker_sales_v1:lhotw4gyr6bgu5jh")
+booster = bentoml.xgboost.load_model("sticker_sales_v1:xtxsvug5wgsxwaav")
 
 path = Path('data/')
 test_df = pd.read_csv(path/'test.csv',index_col='id')
