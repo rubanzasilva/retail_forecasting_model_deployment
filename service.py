@@ -53,7 +53,7 @@ class StickerSalesRegressor:
         dls = to.dataloaders(bs=64)
         test_dl = dls.test_dl(data)
         test_df_new = test_dl.xs
-        return test_df_new
+        return test_df_new,data
     
     #def preprocess(self, train_filepath, test_filepath):
         #train_df = pd.read_csv(train_filepath)
@@ -73,14 +73,27 @@ class StickerSalesRegressor:
 
     @bentoml.api
     def predict(self, data:pd.DataFrame) -> np.ndarray:
-        data = self.preprocess(data)
+        data,original_data = self.preprocess(data)
+        predictions= self.model.predict(data)
+        # Ensure the index of test_df is aligned with the predictions
+        #test_df = test_df.loc[processed_data.index]
+
+        # Extract the date from the original test_df
+        dates = original_data['date'].tolist()
+
+        # Convert predictions to a list
+        predictions_list = predictions.tolist()
+
+        # Return both predictions and dates as a dictionary
+        return {"num_sold": predictions_list, "date": dates}
       # data = preprocess(data)
 
 
-        prediction = self.model.predict(data)
+        #prediction = self.model.predict(data)
+
         #prediction = torch.tensor(prediction)
 
-        return prediction
+        #return prediction
        #if prediction == 0:
         #   status = "No Depression"
        #elif prediction == 1:
@@ -102,8 +115,17 @@ class StickerSalesRegressor:
     @bentoml.api()
     def predict_csv(self,csv:Path) -> np.ndarray:
         csv_data = pd.read_csv(csv)
-        csv_data = self.preprocess(csv_data)
+        csv_data,original_data_a = self.preprocess(csv_data)
         prediction_csv = self.model.predict(csv_data)
-        return prediction_csv
+
+        dates = original_data_a['date'].tolist()
+
+        # Convert predictions to a list
+        predictions_csv_list = prediction_csv.tolist()
+
+        # Return both predictions and dates as a dictionary
+        return {"num_sold": predictions_csv_list, "date": dates}
+
+        #return prediction_csv
     
 
