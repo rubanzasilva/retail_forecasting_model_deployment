@@ -33,6 +33,8 @@ test_df = pd.read_csv(path/'test.csv',index_col='id')
 sub_df = pd.read_csv(path/'sample_submission.csv')
 
 train_df = train_df.dropna(subset=['num_sold'])
+train_df = add_datepart(train_df,'date',drop=False)
+test_df = add_datepart(test_df,'date',drop=False)
 
 cont_names,cat_names = cont_cat_split(train_df, dep_var='num_sold')
 splits = RandomSplitter(valid_pct=0.2)(range_of(train_df))

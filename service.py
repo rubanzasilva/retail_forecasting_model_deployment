@@ -42,6 +42,8 @@ class StickerSalesRegressor:
         train_df = pd.read_csv(path/'train.csv',index_col='id')
         test_df = pd.read_csv(path/'test.csv',index_col='id')
         train_df = train_df.dropna(subset=['num_sold'])
+        train_df = add_datepart(train_df,'date',drop=False)
+        test_df = add_datepart(test_df,'date',drop=False)
         cont_names,cat_names = cont_cat_split(train_df, dep_var='num_sold')
         splits = RandomSplitter(valid_pct=0.2)(range_of(train_df))
         to = TabularPandas(train_df, procs=[Categorify, FillMissing,Normalize],
@@ -74,6 +76,7 @@ class StickerSalesRegressor:
     @bentoml.api
     def predict(self, data:pd.DataFrame) -> np.ndarray:
         data = self.preprocess(data)
+        data = add_datepart(data,'date',drop=False)
       # data = preprocess(data)
 
 
@@ -102,8 +105,8 @@ class StickerSalesRegressor:
     @bentoml.api()
     def predict_csv(self,csv:Path) -> np.ndarray:
         csv_data = pd.read_csv(csv)
+        csv_data = add_datepart(csv_data,'date',drop=False)
         csv_data = self.preprocess(csv_data)
         prediction_csv = self.model.predict(csv_data)
         return prediction_csv
     
-
