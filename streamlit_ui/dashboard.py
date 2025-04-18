@@ -15,6 +15,7 @@ def load_and_predict_data(csv_path):
     response = requests.post(
         "http://localhost:3000/predict_csv",
         #"https://sticker-sales-predictor-63072676.mt-guc1.bentoml.ai/predict_csv",
+        #"https://flexible-functions-ai--sticker-sales-api-predict-api.modal.run/",
         files=files
     )
     predictions = response.json()
