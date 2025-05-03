@@ -13,9 +13,10 @@ def load_and_predict_data(csv_path):
     # Making a POST request to the BentoML predict_csv endpoint
     files = {'csv': open(csv_path, 'rb')}
     response = requests.post(
-        "http://localhost:3000/predict_csv",
+        #"http://localhost:3000/predict_csv",
         #"https://sticker-sales-predictor-63072676.mt-guc1.bentoml.ai/predict_csv",
         #"https://flexible-functions-ai--sticker-sales-api-predict-api.modal.run/",
+        "https://flexible-functions-ai--sticker-sales-api-predict-api.modal.run",
         files=files
     )
     predictions = response.json()
